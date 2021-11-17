@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import DefaultDict, Dict, Set, Sequence, cast
+from typing import DefaultDict, Dict, Set, Iterable, cast
 import os
 import re
 from uuid import uuid4
@@ -7,7 +7,8 @@ from fontTools.ttLib import TTFont, TTCollection
 from fontTools import subset
 import pysubs2
 
-def ass_font_subset(ass_files: Sequence[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike) -> None:
+
+def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike) -> None:
     # collect chars
     def no_at(fn: str) -> str:
         if fn[0] == "@":
@@ -42,7 +43,6 @@ def ass_font_subset(ass_files: Sequence[os.PathLike], fonts_dir: os.PathLike, ou
     font_map: DefaultDict[str, Dict[int, TTFont]] = defaultdict(dict)
     fontname_map: Dict[str, str] = {}
     for font_path in font_files:
-        print(font_path)
         if os.path.splitext(font_path)[1].lower() == ".ttc":
             ttc = TTCollection(font_path, recalcBBoxes=False, lazy=True)
             fonts = cast(list[TTFont], ttc.fonts)
@@ -117,3 +117,6 @@ def ass_font_subset(ass_files: Sequence[os.PathLike], fonts_dir: os.PathLike, ou
             name_table.addName(fn, ((3, 1, 1033),), 0)
             subsetter.subset(font)
             font.save(os.path.join(output_dir, f"{fn}-{fs}.otf"))
+
+
+__all__ = ("ass_font_subset",)
