@@ -113,7 +113,7 @@ def ass_font_subset(ass_files: Sequence[os.PathLike], fonts_dir: os.PathLike, ou
             name_table.addName(font_style_map.get(fs & ~(3 << 7), "Unknown"), ((3, 1, 1033),), 0)
             name_table.addName(fn, ((3, 1, 1033),), 0)
             name_table.addName(fn, ((3, 1, 1033),), 0)
-            name_table.addName("Version 0.1;afspy 0.1", ((3, 1, 1033),), 0)
+            name_table.addName("Version 0.1;afs.py 0.1", ((3, 1, 1033),), 0)
             name_table.addName(fn, ((3, 1, 1033),), 0)
             subsetter.subset(font)
             font.save(os.path.join(output_dir, f"{fn}-{fs}.otf"))
