@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import DefaultDict, Dict, Sequence, Set, List, cast
+from typing import DefaultDict, Dict, Set, Sequence, cast
 import os
 import re
 from uuid import uuid4
