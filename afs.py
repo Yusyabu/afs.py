@@ -102,3 +102,15 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
 
 
 __all__ = ("ass_font_subset",)
+
+
+if __name__ == "__main__":
+    import argparse
+    from pathlib import Path
+    parser = argparse.ArgumentParser(description="Font subsetter for ASS subtitles.")
+    parser.add_argument("ass_files", nargs="+", type=Path, metavar="ASS_FILE", help="the input ASS subtitle file")
+    parser.add_argument("--fonts-dir", type=Path, required=True, help="the fonts directory")
+    parser.add_argument("--output-dir", type=Path, required=True, help="the output directory")
+    args = parser.parse_args()
+    args.output_dir.mkdir(exist_ok=True)
+    ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir)
