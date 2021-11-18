@@ -43,7 +43,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             for fn in font_names:
                 fontname_map[fn] = new_fn
             font_map[new_fn][fs_selection] = font
-    
+
     # modify subtitles
     ass_files = [os.fsdecode(p) for p in ass_files]
     ass_list = [pysubs2.load(p, format_="ass") for p in ass_files]
@@ -76,7 +76,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         ass.save(os.path.join(output_dir, os.path.basename(filename)))
     for chars in char_map.values():
         chars.discard("\n")
-    
+
     # subset fonts
     font_style_map = {
         0b0000000: "Regular",
