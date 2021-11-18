@@ -113,4 +113,11 @@ if __name__ == "__main__":
     parser.add_argument("--output-dir", type=Path, required=True, help="the output directory")
     args = parser.parse_args()
     args.output_dir.mkdir(exist_ok=True)
+    try:
+        next(args.output_dir.iterdir())
+    except StopIteration:
+        pass
+    else:
+        import logging
+        logging.warning("output directory not empty; files may mix up.")
     ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir)
