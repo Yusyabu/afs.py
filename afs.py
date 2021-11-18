@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import DefaultDict, Dict, Set, Iterable, cast
 import os
 import re
+import string
 from uuid import uuid4
 from fontTools.ttLib import TTFont, TTCollection
 from fontTools import subset
@@ -76,6 +77,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         ass.save(os.path.join(output_dir, os.path.basename(filename)))
     for chars in char_map.values():
         chars.discard("\n")
+        chars.update(string.ascii_letters + string.digits)
 
     # subset fonts
     font_style_map = {
@@ -86,7 +88,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         0b1000000: "Regular",
     }
     for fn, chars in char_map.items():
-        subsetter = subset.Subsetter(subset.Options(hinting=False))
+        subsetter = subset.Subsetter(subset.Options(hinting=False, layout_features=["vrt2"]))
         subsetter.populate(text="".join(chars))
         for fs, font in font_map[fn].items():
             name_table = font["name"]
