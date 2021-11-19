@@ -88,7 +88,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         0b1000000: "Regular",
     }
     for fn, chars in char_map.items():
-        subsetter = subset.Subsetter(subset.Options(hinting=False, layout_features=["vrt2"]))
+        subsetter = subset.Subsetter(subset.Options(hinting=False, layout_features=["vrt2"], ignore_missing_unicodes=False))
         subsetter.populate(text="".join(chars))
         for fs, font in font_map[fn].items():
             name_table = font["name"]
