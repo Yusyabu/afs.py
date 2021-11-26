@@ -99,7 +99,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             name_table.addName(font_style_map.get(fs & ~(3 << 7), "Unknown"), ((3, 1, 1033),), 0)
             name_table.addName(fn, ((3, 1, 1033),), 0)
             name_table.addName(fn, ((3, 1, 1033),), 0)
-            name_table.addName("Version 0.1;afs.py 0.1", ((3, 1, 1033),), 0)
+            name_table.addName("Version 0.1;afs.py 0.2", ((3, 1, 1033),), 0)
             name_table.addName(fn, ((3, 1, 1033),), 0)
             if "GSUB" in font: trim_g(font["GSUB"])
             if "GPOS" in font: trim_g(font["GPOS"])
