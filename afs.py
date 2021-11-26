@@ -77,18 +77,20 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         ass.save(os.path.join(output_dir, os.path.basename(filename)))
     for chars in char_map.values():
         chars.discard("\n")
-        chars.update(string.ascii_letters + string.digits)
 
     # subset fonts
-    font_style_map = {
-        0b0000000: "Regular",
-        0b0000001: "Italic",
-        0b0100000: "Bold",
-        0b0100001: "Bold Italic",
-        0b1000000: "Regular",
-    }
+    def trim_g(g):
+        for script in g.table.ScriptList.ScriptRecord:
+            if script.ScriptTag == "DFLT":
+                preserve_script = script
+                break
+        else:
+            # XXX: I don't know why but there exist fonts without a DFLT script like 方正准圆
+            preserve_script = g.table.ScriptList.ScriptRecord[0]
+        g.subset_script_tags([preserve_script.ScriptTag])
+    font_style_map = { 0b0000000: "Regular", 0b0000001: "Italic", 0b0100000: "Bold", 0b0100001: "Bold Italic", 0b1000000: "Regular" }
     for fn, chars in char_map.items():
-        subsetter = subset.Subsetter(subset.Options(hinting=False))
+        subsetter = subset.Subsetter(subset.Options(hinting=False, layout_features=["vert", "vrt2"]))
         subsetter.populate(text="".join(chars))
         for fs, font in font_map[fn].items():
             name_table = font["name"]
@@ -99,6 +101,8 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             name_table.addName(fn, ((3, 1, 1033),), 0)
             name_table.addName("Version 0.1;afs.py 0.1", ((3, 1, 1033),), 0)
             name_table.addName(fn, ((3, 1, 1033),), 0)
+            if "GSUB" in font: trim_g(font["GSUB"])
+            if "GPOS" in font: trim_g(font["GPOS"])
             subsetter.subset(font)
             font.save(os.path.join(output_dir, f"{fn}-{fs}.otf"))
 
