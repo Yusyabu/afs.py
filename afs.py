@@ -2,7 +2,6 @@ from collections import defaultdict
 from typing import DefaultDict, Dict, Set, Iterable, cast
 import os
 import re
-import string
 from uuid import uuid4
 from fontTools.ttLib import TTFont, TTCollection
 from fontTools import subset
@@ -116,14 +115,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Font subsetter for ASS subtitles.")
     parser.add_argument("ass_files", nargs="+", type=Path, metavar="ASS_FILE", help="the input ASS subtitle file")
     parser.add_argument("--fonts-dir", type=Path, required=True, help="the fonts directory")
-    parser.add_argument("--output-dir", type=Path, required=True, help="the output directory")
+    parser.add_argument("--output-dir", type=Path, required=True, help="the output directory (MUST NOT EXISTS)")
     args = parser.parse_args()
-    args.output_dir.mkdir(exist_ok=True)
-    try:
-        next(args.output_dir.iterdir())
-    except StopIteration:
-        pass
-    else:
-        import logging
-        logging.warning("output directory not empty; files may mix up.")
+    args.output_dir.mkdir()
     ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir)
