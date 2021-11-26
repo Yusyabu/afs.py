@@ -8,6 +8,12 @@ from fontTools import subset
 import pysubs2
 
 
+class FontNotFound(RuntimeError):
+    def __init__(self, name: str) -> None:
+        super().__init__(f'font not found: "{name}"')
+        self.name = name
+
+
 def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike) -> None:
     # collect fonts
     fonts_dir = os.fsdecode(fonts_dir)
@@ -18,6 +24,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
     font_map: DefaultDict[str, Dict[int, TTFont]] = defaultdict(dict)
     fontname_map: Dict[str, str] = {}
     for font_path in font_files:
+        if not os.path.isfile(font_path): continue
         if os.path.splitext(font_path)[1].lower() == ".ttc":
             ttc = TTCollection(font_path, recalcBBoxes=False, lazy=True)
             fonts = cast(list[TTFont], ttc.fonts)
@@ -51,7 +58,11 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
     fn_reg = re.compile(r"(?<=\\fn)[^\}\\]+")
     output_dir = os.fsdecode(output_dir)
     def repl_fn(fn: str, no_at: bool = False) -> str:
-        new_fn = fontname_map[fn[1:] if fn[0] == "@" else fn]
+        fn_no_at = fn[1:] if fn[0] == "@" else fn
+        try:
+            new_fn = fontname_map[fn_no_at]
+        except KeyError:
+            raise FontNotFound(fn_no_at) from None
         if fn[0] == "@" and not no_at: new_fn = "@" + new_fn
         return new_fn
     def fn_collect_and_repl(match: re.Match) -> str:
@@ -106,7 +117,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             font.save(os.path.join(output_dir, f"{fn}-{fs}.otf"))
 
 
-__all__ = ("ass_font_subset",)
+__all__ = ("ass_font_subset", "FontNotFound")
 
 
 if __name__ == "__main__":
