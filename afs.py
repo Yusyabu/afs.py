@@ -66,7 +66,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         if fn[0] == "@" and not no_at: new_fn = "@" + new_fn
         return new_fn
     def fn_collect_and_repl(match: re.Match) -> str:
-        fn = match.group(0)
+        fn = match.group(0).strip()
         used_fonts.append(repl_fn(fn, True))
         return repl_fn(fn)
     for filename, ass in zip(ass_files, ass_list):
