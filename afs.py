@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import MutableMapping
 from typing import DefaultDict, Dict, Set, Iterable, cast
 import os
 import re
@@ -6,6 +7,26 @@ from uuid import uuid4
 from fontTools.ttLib import TTFont, TTCollection
 from fontTools import subset
 import pysubs2
+
+
+class CaseInsensitiveDict(MutableMapping):
+    def __init__(self, *args, **kwargs):
+        self._s = {k.lower(): (k, v) for k, v in dict(*args, **kwargs).items()}
+
+    def __getitem__(self, k):
+        return self._s[k.lower()][1]
+
+    def __setitem__(self, k, v):
+        self._s[k.lower()] = (k, v)
+
+    def __delitem__(self, k):
+        del self._s[k.lower()]
+
+    def __iter__(self):
+        return iter(v[0] for v in self._s.values())
+
+    def __len__(self):
+        return len(self._s)
 
 
 class FontNotFound(RuntimeError):
@@ -22,7 +43,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         if os.path.splitext(font_path)[1].lower() in (".otf", ".ttf", ".ttc"):
             font_files.append(os.path.join(fonts_dir, font_path))
     font_map: DefaultDict[str, Dict[int, TTFont]] = defaultdict(dict)
-    fontname_map: Dict[str, str] = {}
+    fontname_map = CaseInsensitiveDict()
     for font_path in font_files:
         if not os.path.isfile(font_path): continue
         if os.path.splitext(font_path)[1].lower() == ".ttc":
