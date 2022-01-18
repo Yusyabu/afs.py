@@ -93,7 +93,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
     for filename, ass in zip(ass_files, ass_list):
         used_styles = set()
         for ln in ass.events:
-            if ln.is_comment or ln.is_drawing:
+            if ln.is_comment or ln.is_drawing or ln.plaintext == "":
                 continue
             plaintext = ln.plaintext
             style = ass.styles[ln.style]
