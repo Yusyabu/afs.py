@@ -3,6 +3,7 @@ from collections.abc import MutableMapping
 from typing import DefaultDict, Dict, Set, Iterable, cast
 import os
 import re
+import logging
 from uuid import uuid4
 from fontTools.ttLib import TTFont, TTCollection
 from fontTools import subset
@@ -35,7 +36,7 @@ class FontNotFound(RuntimeError):
         self.name = name
 
 
-def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike) -> None:
+def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike, *, continue_on_font_not_found: bool = False) -> None:
     # collect fonts
     fonts_dir = os.fsdecode(fonts_dir)
     font_files: list[str] = []
@@ -78,12 +79,22 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
     char_map: DefaultDict[str, Set[str]] = defaultdict(set)
     fn_reg = re.compile(r"(?<=\\fn)[^\}\\]+")
     output_dir = os.fsdecode(output_dir)
+    logged_fnf = set()
+    if len(os.listdir(output_dir)) != 2:
+        logging.warning("output directory not empty")
     def repl_fn(fn: str, no_at: bool = False) -> str:
         fn_no_at = fn[1:] if fn[0] == "@" else fn
+        new_fn = "Arial"
         try:
             new_fn = fontname_map[fn_no_at]
         except KeyError:
-            raise FontNotFound(fn_no_at) from None
+            exc = FontNotFound(fn_no_at)
+            if continue_on_font_not_found:
+                if fn_no_at not in logged_fnf:
+                    logging.error(exc)
+                    logged_fnf.add(fn_no_at)
+            else:
+                raise exc from None
         if fn[0] == "@" and not no_at: new_fn = "@" + new_fn
         return new_fn
     def fn_collect_and_repl(match: re.Match) -> str:
@@ -148,6 +159,7 @@ if __name__ == "__main__":
     parser.add_argument("ass_files", nargs="+", type=Path, metavar="ASS_FILE", help="the input ASS subtitle file")
     parser.add_argument("--fonts-dir", type=Path, required=True, help="the fonts directory")
     parser.add_argument("--output-dir", type=Path, required=True, help="the output directory (MUST NOT EXISTS)")
+    parser.add_argument("--continue-on-font-not-found", action="store_true", help="log and continue when a font is not found, instead of stopping")
     args = parser.parse_args()
     args.output_dir.mkdir()
-    ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir)
+    ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir, continue_on_font_not_found=args.continue_on_font_not_found)
