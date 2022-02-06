@@ -80,7 +80,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
     fn_reg = re.compile(r"(?<=\\fn)[^\}\\]+")
     output_dir = os.fsdecode(output_dir)
     logged_fnf = set()
-    if len(os.listdir(output_dir)) != 2:
+    if os.listdir(output_dir):
         logging.warning("output directory not empty")
     def repl_fn(fn: str, no_at: bool = False) -> str:
         fn_no_at = fn[1:] if fn[0] == "@" else fn
@@ -156,12 +156,26 @@ __version__ = "0.3.0"
 if __name__ == "__main__":
     import argparse
     from pathlib import Path
+
     parser = argparse.ArgumentParser(description="Font subsetter for ASS subtitles.")
     parser.add_argument("ass_files", nargs="+", type=Path, metavar="ASS_FILE", help="the input ASS subtitle file")
     parser.add_argument("--fonts-dir", type=Path, required=True, help="the fonts directory")
     parser.add_argument("--output-dir", type=Path, required=True, help="the output directory (MUST NOT EXISTS)")
+    parser.add_argument("--delete-output-dir", action="store_true", help="DELETE output directory before processing, if it exists")
     parser.add_argument("--continue-on-font-not-found", action="store_true", help="log and continue when a font is not found, instead of stopping")
+    parser.add_argument("--fonttools-verbose", action="store_true", help="show verbose fontTools logging")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = parser.parse_args()
+
+    if args.delete_output_dir:
+        import shutil
+        try:
+            shutil.rmtree(args.output_dir)
+        except FileNotFoundError:
+            pass
     args.output_dir.mkdir()
+
+    if not args.fonttools_verbose:
+        logging.getLogger("fontTools").setLevel(logging.ERROR)
+
     ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir, continue_on_font_not_found=args.continue_on_font_not_found)
