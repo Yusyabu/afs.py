@@ -215,6 +215,8 @@ if __name__ == "__main__":
         except AttributeError:
             pass
 
+        logging.basicConfig(format="\x1b[L%(levelname)s\t%(message)s")
+
         state = -1
         msg = ["Collecting font", "Modifying subtitle", "Subsetting font"]
         sys.stderr.buffer.write(b"\x1b7")
