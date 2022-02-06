@@ -5,6 +5,7 @@ import os
 import re
 import logging
 from uuid import uuid4
+from functools import wraps
 from fontTools.ttLib import TTFont, TTCollection
 from fontTools import subset
 import pysubs2
@@ -36,7 +37,21 @@ class FontNotFound(RuntimeError):
         self.name = name
 
 
-def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike, *, continue_on_font_not_found: bool = False) -> None:
+def pre_activate(f):
+    @wraps(f)
+    def _(*args, **kwargs):
+        gen = f(*args, **kwargs)
+        try:
+            next(gen)
+        except StopIteration as si:
+            return si.value
+        return gen
+    return _
+
+
+@pre_activate
+def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike, *, continue_on_font_not_found: bool = False, progress: bool = False) -> None:
+    if progress: yield  # pre activate
     # collect fonts
     fonts_dir = os.fsdecode(fonts_dir)
     font_files: list[str] = []
@@ -45,8 +60,10 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             font_files.append(os.path.join(fonts_dir, font_path))
     font_map: DefaultDict[str, Dict[int, TTFont]] = defaultdict(dict)
     fontname_map = CaseInsensitiveDict()
+    if progress: yield len(font_files)
     for font_path in font_files:
         if not os.path.isfile(font_path): continue
+        if progress: yield font_path
         if os.path.splitext(font_path)[1].lower() == ".ttc":
             ttc = TTCollection(font_path, recalcBBoxes=False, lazy=True)
             fonts = cast(list[TTFont], ttc.fonts)
@@ -75,7 +92,6 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
 
     # modify subtitles
     ass_files = [os.fsdecode(p) for p in ass_files]
-    ass_list = [pysubs2.load(p, format_="ass") for p in ass_files]
     char_map: DefaultDict[str, Set[str]] = defaultdict(set)
     fn_reg = re.compile(r"(?<=\\fn)[^\}\\]+")
     output_dir = os.fsdecode(output_dir)
@@ -101,7 +117,10 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         fn = match.group(0).strip()
         used_fonts.append(repl_fn(fn, True))
         return repl_fn(fn)
-    for filename, ass in zip(ass_files, ass_list):
+    if progress: yield len(ass_files)
+    for filename in ass_files:
+        if progress: yield filename
+        ass = pysubs2.load(filename, format_="ass")
         used_styles = set()
         for ln in ass.events:
             if ln.is_comment or ln.is_drawing or ln.plaintext == "":
@@ -131,10 +150,13 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             preserve_script = g.table.ScriptList.ScriptRecord[0]
         g.subset_script_tags([preserve_script.ScriptTag])
     font_style_map = { 0b0000000: "Regular", 0b0000001: "Italic", 0b0100000: "Bold", 0b0100001: "Bold Italic", 0b1000000: "Regular" }
+    if progress: yield sum(len(font_map[fn]) for fn in char_map)
     for fn, chars in char_map.items():
         subsetter = subset.Subsetter(subset.Options(hinting=False, layout_features=["vert", "vrt2"]))
         subsetter.populate(text="".join(chars))
         for fs, font in font_map[fn].items():
+            save_path = os.path.join(output_dir, f"{fn}-{fs}.otf")
+            if progress: yield save_path
             name_table = font["name"]
             name_table.names = []
             name_table.addName(fn, ((3, 1, 1033),), 0)
@@ -146,7 +168,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             if "GSUB" in font: trim_g(font["GSUB"])
             if "GPOS" in font: trim_g(font["GPOS"])
             subsetter.subset(font)
-            font.save(os.path.join(output_dir, f"{fn}-{fs}.otf"))
+            font.save(save_path)
 
 
 __all__ = ("ass_font_subset", "FontNotFound")
@@ -154,6 +176,7 @@ __version__ = "0.3.0"
 
 
 if __name__ == "__main__":
+    import sys
     import argparse
     from pathlib import Path
 
@@ -161,6 +184,7 @@ if __name__ == "__main__":
     parser.add_argument("ass_files", nargs="+", type=Path, metavar="ASS_FILE", help="the input ASS subtitle file")
     parser.add_argument("--fonts-dir", type=Path, required=True, help="the fonts directory")
     parser.add_argument("--output-dir", type=Path, required=True, help="the output directory (MUST NOT EXISTS)")
+    parser.add_argument("--quiet", action="store_true", help="do not show progress")
     parser.add_argument("--delete-output-dir", action="store_true", help="DELETE output directory before processing, if it exists")
     parser.add_argument("--continue-on-font-not-found", action="store_true", help="log and continue when a font is not found, instead of stopping")
     parser.add_argument("--fonttools-verbose", action="store_true", help="show verbose fontTools logging")
@@ -178,4 +202,31 @@ if __name__ == "__main__":
     if not args.fonttools_verbose:
         logging.getLogger("fontTools").setLevel(logging.ERROR)
 
-    ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir, continue_on_font_not_found=args.continue_on_font_not_found)
+    progress = not args.quiet and sys.stderr.isatty()
+
+    gen = ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir, continue_on_font_not_found=args.continue_on_font_not_found, progress=progress)
+
+    if progress:
+        state = -1
+        msg = ["Collecting font", "Modifying subtitle", "Subsetting font"]
+        sys.stderr.buffer.write(b"\x1b7")
+        for y in gen:
+            if isinstance(y, int):
+                state += 1
+                total = y
+                item = 0
+            else:
+                item += 1
+                y = os.path.basename(y)
+                sys.stderr.buffer.write(b"\x1b8\x1b7\x1b[K")
+                print(f"{msg[state]}:\t{y}", file=sys.stderr)
+                sys.stderr.buffer.write(b"\x1b[K")
+                stotal = str(total)
+                sitem = str(item).zfill(len(stotal))
+                prompt = f"#{sitem}/{stotal}"
+                prompt = prompt.ljust(10)
+                cols = os.get_terminal_size(sys.stderr.fileno()).columns
+                bar_width = cols - 12
+                num_slash = bar_width * item // total
+                num_dot = bar_width - num_slash
+                print(prompt, "[", "#" * num_slash, "." * num_dot, "]", sep="", file=sys.stderr)
