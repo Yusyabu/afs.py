@@ -207,6 +207,14 @@ if __name__ == "__main__":
     gen = ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir, continue_on_font_not_found=args.continue_on_font_not_found, progress=progress)
 
     if progress:
+        import ctypes
+        try:
+            ker = ctypes.windll.kernel32
+            h = ker.GetStdHandle(-12)
+            ker.SetConsoleMode(h, 7)
+        except AttributeError:
+            pass
+
         state = -1
         msg = ["Collecting font", "Modifying subtitle", "Subsetting font"]
         sys.stderr.buffer.write(b"\x1b7")
