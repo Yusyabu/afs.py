@@ -121,8 +121,6 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             style = ass.styles[style_name]
             style.fontname = repl_fn(style.fontname)
         ass.save(os.path.join(output_dir, os.path.basename(filename)))
-    for chars in char_map.values():
-        chars.discard("\n")
 
     # subset fonts
     def trim_g(g):
