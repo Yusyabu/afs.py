@@ -74,7 +74,6 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
 
     # modify subtitles
     ass_files = [os.fsdecode(p) for p in ass_files]
-    ass_list = [pysubs2.load(p, format_="ass") for p in ass_files]
     char_map: DefaultDict[str, Set[str]] = defaultdict(set)
     fn_reg = re.compile(r"(?<=\\fn)[^\}\\]+")
     output_dir = os.fsdecode(output_dir)
@@ -90,7 +89,8 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         fn = match.group(0).strip()
         used_fonts.append(repl_fn(fn, True))
         return repl_fn(fn)
-    for filename, ass in zip(ass_files, ass_list):
+    for filename in ass_files:
+        ass = pysubs2.load(filename, format_="ass")
         used_styles = set()
         for ln in ass.events:
             if ln.is_comment or ln.is_drawing or ln.plaintext == "":
