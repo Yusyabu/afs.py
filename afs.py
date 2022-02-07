@@ -1,3 +1,7 @@
+__all__ = ("ass_font_subset", "FontNotFound")
+__version__ = "0.3.1"
+
+
 from collections import defaultdict
 from collections.abc import MutableMapping
 from typing import DefaultDict, Dict, Set, Iterable, cast
@@ -141,15 +145,12 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             name_table.addName(font_style_map.get(fs & ~(3 << 7), "Unknown"), ((3, 1, 1033),), 0)
             name_table.addName(fn, ((3, 1, 1033),), 0)
             name_table.addName(fn, ((3, 1, 1033),), 0)
-            name_table.addName("Version 0.1;afs.py 0.2", ((3, 1, 1033),), 0)
+            name_table.addName(f"Version 0.1;afs.py {__version__}", ((3, 1, 1033),), 0)
             name_table.addName(fn, ((3, 1, 1033),), 0)
             if "GSUB" in font: trim_g(font["GSUB"])
             if "GPOS" in font: trim_g(font["GPOS"])
             subsetter.subset(font)
             font.save(os.path.join(output_dir, f"{fn}-{fs}.otf"))
-
-
-__all__ = ("ass_font_subset", "FontNotFound")
 
 
 if __name__ == "__main__":
@@ -159,6 +160,7 @@ if __name__ == "__main__":
     parser.add_argument("ass_files", nargs="+", type=Path, metavar="ASS_FILE", help="the input ASS subtitle file")
     parser.add_argument("--fonts-dir", type=Path, required=True, help="the fonts directory")
     parser.add_argument("--output-dir", type=Path, required=True, help="the output directory (MUST NOT EXISTS)")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = parser.parse_args()
     args.output_dir.mkdir()
     ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir)
