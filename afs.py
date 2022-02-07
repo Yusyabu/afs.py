@@ -1,17 +1,16 @@
 __all__ = ("ass_font_subset", "FontNotFound")
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 
 
 from collections import defaultdict
 from collections.abc import MutableMapping
-from typing import DefaultDict, Dict, Set, Iterable, cast
+from typing import DefaultDict, Dict, List, Set, Tuple, Iterable, cast
 import os
 import re
 import logging
 from uuid import uuid4
 from fontTools.ttLib import TTFont, TTCollection
 from fontTools import subset
-import pysubs2
 
 
 class CaseInsensitiveDict(MutableMapping):
@@ -43,7 +42,7 @@ class FontNotFound(RuntimeError):
 def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike, *, continue_on_font_not_found: bool = False) -> None:
     # collect fonts
     fonts_dir = os.fsdecode(fonts_dir)
-    font_files: list[str] = []
+    font_files: List[str] = []
     for font_path in os.listdir(fonts_dir):
         if os.path.splitext(font_path)[1].lower() in (".otf", ".ttf", ".ttc"):
             font_files.append(os.path.join(fonts_dir, font_path))
@@ -53,9 +52,9 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         if not os.path.isfile(font_path): continue
         if os.path.splitext(font_path)[1].lower() == ".ttc":
             ttc = TTCollection(font_path, recalcBBoxes=False, lazy=True)
-            fonts = cast(list[TTFont], ttc.fonts)
+            fonts = cast(List[TTFont], ttc.fonts)
         else:
-            fonts = [TTFont(font_path, recalcBBoxes=False, lazy=True)]
+            fonts = cast(List[TTFont], [TTFont(font_path, recalcBBoxes=False, lazy=True)])
         for font in fonts:
             name_table = font["name"]
             font_names = []
@@ -76,51 +75,96 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             for fn in font_names:
                 fontname_map[fn] = new_fn
             font_map[new_fn][fs_selection] = font
+    fn404 = "00000000-0000-0000-0000-000000000000"
 
     # modify subtitles
     ass_files = [os.fsdecode(p) for p in ass_files]
     char_map: DefaultDict[str, Set[str]] = defaultdict(set)
-    fn_reg = re.compile(r"(?<=\\fn)[^\}\\]+")
+    fn_reg = re.compile(r"(?<=\\fn)[^\\]+")
+    or_reg = re.compile(r"{(.*?)}")
     output_dir = os.fsdecode(output_dir)
     logged_fnf = set()
     if os.listdir(output_dir):
         logging.warning("output directory not empty")
-    def repl_fn(fn: str, no_at: bool = False) -> str:
+    def sub_in_ranges(pattern: re.Pattern, repl, string: str, spans: Iterable[Tuple[int, int]]):
+        last_idx = 0
+        buf = []
+        for start, end in spans:
+            buf.append(string[last_idx:start])
+            buf.append(string[start:end])
+            last_idx = end
+        buf.append(string[last_idx:])
+        for i in range(len(buf)):
+            if i % 2:
+                buf[i] = pattern.sub(repl, buf[i])
+        return "".join(buf)
+    def or_collect_and_clear(match: re.Match) -> str:
+        overrides.append(match)
+        return ""
+    def fnf(fn: str) -> None:
+        exc = FontNotFound(fn)
+        if continue_on_font_not_found:
+            if fn not in logged_fnf:
+                logging.error(exc)
+                logged_fnf.add(fn)
+        else:
+            raise exc from None
+    def repl_fn(fn: str, no_at: bool = False, ignore: bool = False) -> str:
         fn_no_at = fn[1:] if fn[0] == "@" else fn
-        new_fn = "Arial"
+        new_fn = fn404
         try:
             new_fn = fontname_map[fn_no_at]
         except KeyError:
-            exc = FontNotFound(fn_no_at)
-            if continue_on_font_not_found:
-                if fn_no_at not in logged_fnf:
-                    logging.error(exc)
-                    logged_fnf.add(fn_no_at)
-            else:
-                raise exc from None
+            if not ignore:
+                fnf(fn_no_at)
         if fn[0] == "@" and not no_at: new_fn = "@" + new_fn
         return new_fn
     def fn_collect_and_repl(match: re.Match) -> str:
         fn = match.group(0).strip()
         used_fonts.append(repl_fn(fn, True))
         return repl_fn(fn)
-    for filename in ass_files:
-        ass = pysubs2.load(filename, format_="ass")
-        used_styles = set()
-        for ln in ass.events:
-            if ln.is_comment or ln.is_drawing or ln.plaintext == "":
-                continue
-            plaintext = ln.plaintext
-            style = ass.styles[ln.style]
-            used_fonts = [repl_fn(style.fontname, True)]
-            ln.text = fn_reg.sub(fn_collect_and_repl, ln.text)
-            for fn in used_fonts:
-                char_map[fn].update(plaintext)
-            used_styles.add(ln.style)
-        for style_name in used_styles:
-            style = ass.styles[style_name]
-            style.fontname = repl_fn(style.fontname)
-        ass.save(os.path.join(output_dir, os.path.basename(filename)))
+    for infn in ass_files:
+        outfn = os.path.join(output_dir, os.path.basename(infn))
+        with open(infn, "r", encoding="utf-8") as infile, open(outfn, "w", encoding="utf-8-sig", newline="\r\n") as outfile:
+            if infile.read(1) != '\ufeff':
+                infile.seek(0)
+            styles: Dict[str, Dict[str, str]] = {}
+            for ln in infile:
+                if ln.startswith("Format:"):
+                    last_format = [field.strip() for field in ln[7:].split(",")]
+                elif ln.startswith("Style:"):
+                    style = ln[6:].split(",")
+                    style = {k: v.strip() for k, v in zip(last_format, style)}
+                    styles[style["Name"]] = style
+                    original_fn = style["Fontname"]
+                    style["Fontname"] = repl_fn(original_fn, False, True)
+                    ln = "Style: " + ",".join(style.values()) + "\n"
+                    style["OriginalFontname"] = original_fn
+                elif ln.startswith("Dialogue:"):
+                    dialog = ln[9:].split(',', len(last_format) - 1)
+                    text = dialog[-1].rstrip("\n")
+                    dialog.pop()
+                    dialog = {k: v.strip() for k, v in zip(last_format, dialog)}
+                    style_name = dialog["Style"]
+                    style = styles[style_name]
+                    overrides: List[re.Match] = []
+                    plaintext = or_reg.sub(or_collect_and_clear, text)
+                    plaintext = plaintext.replace(r"\h", "\u00A0")
+                    plaintext = plaintext.replace(r"\n", "\n")
+                    plaintext = plaintext.replace(r"\N", "\n")
+                    if plaintext != "":
+                        style_font = style["Fontname"]
+                        if style_font.startswith("@"):
+                            style_font = style_font[1:]
+                        if style_font == fn404:
+                            original_fn = style["OriginalFontname"]
+                            fnf(original_fn[1:] if original_fn.startswith("@") else original_fn)
+                        used_fonts = [style_font]
+                        text = sub_in_ranges(fn_reg, fn_collect_and_repl, text, [override.span(1) for override in overrides])
+                        for fn in used_fonts:
+                            char_map[fn].update(plaintext)
+                        ln = "Dialogue: " + ",".join(dialog.values()) + "," + text + "\n"
+                outfile.write(ln)
 
     # subset fonts
     def trim_g(g):
