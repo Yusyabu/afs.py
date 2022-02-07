@@ -79,6 +79,8 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
     fn_reg = re.compile(r"(?<=\\fn)[^\}\\]+")
     output_dir = os.fsdecode(output_dir)
     logged_fnf = set()
+    if os.listdir(output_dir):
+        logging.warning("output directory not empty")
     def repl_fn(fn: str, no_at: bool = False) -> str:
         fn_no_at = fn[1:] if fn[0] == "@" else fn
         new_fn = "Arial"
