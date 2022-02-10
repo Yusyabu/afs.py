@@ -1,1 +1,2 @@
 fonttools ~= 4.27
+chardet ~= 4.0

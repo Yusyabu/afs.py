@@ -8,8 +8,10 @@ import os
 import re
 import logging
 from uuid import uuid4
+from io import DEFAULT_BUFFER_SIZE
 from fontTools.ttLib import TTFont, TTCollection
 from fontTools import subset
+from chardet.universaldetector import UniversalDetector
 
 
 class FontNotFound(RuntimeError):
@@ -104,9 +106,15 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         return repl_fn(fn)
     for infn in ass_files:
         outfn = os.path.join(output_dir, os.path.basename(infn))
-        with open(infn, "r", encoding="utf-8") as infile, open(outfn, "w", encoding="utf-8-sig", newline="\r\n") as outfile:
-            if infile.read(1) != '\ufeff':
-                infile.seek(0)
+        detecter = UniversalDetector()
+        with open(infn, "rb", buffering=0) as infile:
+            while True:
+                buf = infile.read(DEFAULT_BUFFER_SIZE)
+                if not buf: break
+                detecter.feed(buf)
+                if detecter.done: break
+        detecter.close()
+        with open(infn, "r", encoding=detecter.result["encoding"]) as infile, open(outfn, "w", encoding="utf-8-sig", newline="\r\n") as outfile:
             styles: Dict[str, Dict[str, str]] = {}
             for ln in infile:
                 if ln.startswith("Format:"):
