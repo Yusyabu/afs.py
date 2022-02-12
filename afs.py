@@ -53,6 +53,8 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
                 new_fn = str(uuid4())
             for fn in font_names:
                 fontname_map[fn] = new_fn
+            if fs_selection in font_map[new_fn]:
+                logging.warning(f'multiple candidates are found for "{font_names[0]}" fsSelection={fs_selection}; random one is chosen')
             font_map[new_fn][fs_selection] = font
     fn404 = "00000000-0000-0000-0000-000000000000"
 
