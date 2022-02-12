@@ -3,7 +3,7 @@ __version__ = "0.4.0"
 
 
 from collections import defaultdict
-from typing import DefaultDict, Dict, List, Set, Tuple, Iterable, cast
+from typing import DefaultDict, Dict, List, Set, Tuple, Iterable, Generator, cast
 import os
 import re
 import logging
@@ -18,22 +18,29 @@ class FontNotFound(RuntimeError):
         self.name = name
 
 
-def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike, *, continue_on_font_not_found: bool = False) -> None:
+def walk_dir(path: str, recursive: bool) -> Generator[str, None, None]:
+    with os.scandir(path) as it:
+        for entry in it:
+            if entry.is_file():
+                yield entry.path
+            elif recursive and entry.is_dir():
+                yield from walk_dir(entry.path, recursive)
+
+
+def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike, *, continue_on_font_not_found: bool = False, recursive_fonts_dir: bool = False) -> None:
     # collect fonts
     fonts_dir = os.fsdecode(fonts_dir)
-    font_files: List[str] = []
-    for font_path in os.listdir(fonts_dir):
-        if os.path.splitext(font_path)[1].lower() in (".otf", ".ttf", ".ttc"):
-            font_files.append(os.path.join(fonts_dir, font_path))
     font_map: DefaultDict[str, Dict[int, TTFont]] = defaultdict(dict)
     fontname_map: Dict[str, str] = {}
-    for font_path in font_files:
-        if not os.path.isfile(font_path): continue
-        if os.path.splitext(font_path)[1].lower() == ".ttc":
+    for font_path in walk_dir(fonts_dir, recursive_fonts_dir):
+        extname = os.path.splitext(font_path)[1].lower()
+        if extname == ".ttc":
             ttc = TTCollection(font_path, recalcBBoxes=False, lazy=True)
             fonts = cast(List[TTFont], ttc.fonts)
-        else:
+        elif extname in (".otf", ".ttf"):
             fonts = cast(List[TTFont], [TTFont(font_path, recalcBBoxes=False, lazy=True)])
+        else:
+            continue
         for font in fonts:
             name_table = font["name"]
             font_names = []
@@ -183,8 +190,9 @@ if __name__ == "__main__":
     parser.add_argument("ass_files", nargs="+", type=Path, metavar="ASS_FILE", help="the input ASS subtitle file")
     parser.add_argument("--fonts-dir", type=Path, required=True, help="the fonts directory")
     parser.add_argument("--output-dir", type=Path, required=True, help="the output directory (MUST NOT EXISTS)")
+    parser.add_argument("--recursive-fonts-dir", action="store_true", help="recursively walk the fonts directory")
     parser.add_argument("--continue-on-font-not-found", action="store_true", help="log and continue when a font is not found, instead of stopping")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = parser.parse_args()
     args.output_dir.mkdir()
-    ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir, continue_on_font_not_found=args.continue_on_font_not_found)
+    ass_font_subset(args.ass_files, args.fonts_dir, args.output_dir, continue_on_font_not_found=args.continue_on_font_not_found, recursive_fonts_dir=args.recursive_fonts_dir)
