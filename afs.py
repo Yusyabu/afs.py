@@ -3,7 +3,7 @@ __version__ = "0.4.0"
 
 
 from collections import defaultdict
-from typing import DefaultDict, Dict, List, Set, Tuple, Iterable, Generator, cast
+from typing import DefaultDict, Dict, List, Set, Optional, Tuple, Iterable, Generator, cast
 import os
 import re
 import logging
@@ -19,35 +19,49 @@ class FontNotFound(RuntimeError):
 
 
 def walk_dir(path: str, recursive: bool) -> Generator[str, None, None]:
-    with os.scandir(path) as it:
-        for entry in it:
-            if entry.is_file():
-                yield entry.path
-            elif recursive and entry.is_dir():
-                yield from walk_dir(entry.path, recursive)
+    for entry in os.scandir(path):
+        if entry.is_file():
+            yield entry.path
+        elif recursive and entry.is_dir():
+            yield from walk_dir(entry.path, recursive)
 
 
 def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike, *, continue_on_font_not_found: bool = False, recursive_fonts_dir: bool = False) -> None:
     # collect fonts
     fonts_dir = os.fsdecode(fonts_dir)
-    font_map: DefaultDict[str, Dict[int, TTFont]] = defaultdict(dict)
+    font_map: DefaultDict[str, Dict[int, Optional[TTFont]]] = defaultdict(dict)
+    font_loc: DefaultDict[str, Dict[int, Tuple[str, int]]] = defaultdict(dict)
     fontname_map: Dict[str, str] = {}
     for font_path in walk_dir(fonts_dir, recursive_fonts_dir):
-        extname = os.path.splitext(font_path)[1].lower()
-        if extname == ".ttc":
-            ttc = TTCollection(font_path, recalcBBoxes=False, lazy=True)
-            fonts = cast(List[TTFont], ttc.fonts)
-        elif extname in (".otf", ".ttf"):
-            fonts = cast(List[TTFont], [TTFont(font_path, recalcBBoxes=False, lazy=True)])
-        else:
+        if os.path.splitext(font_path)[1].lower() not in (".otf", ".ttf", ".ttc"):
             continue
-        for font in fonts:
+        try:
+            font_file = open(font_path, "rb")
+        except OSError as err:
+            if err.errno == 24:
+                for fd in font_map.values():
+                    for fs in fd:
+                        fd[fs] = None
+                font_file = open(font_path, "rb")
+            else:
+                raise
+        is_ttc = font_file.read(4) == b"ttcf"
+        font_file.seek(0)
+        if is_ttc:
+            ttc = TTCollection(font_file, recalcBBoxes=False, lazy=True)
+            fonts = cast(List[TTFont], ttc.fonts)
+        else:
+            fonts = cast(List[TTFont], [TTFont(font_file, recalcBBoxes=False, lazy=True)])
+        for idx, font in enumerate(fonts):
             name_table = font["name"]
             font_names = []
             for record in name_table.names:
                 if record.platformID == 3 and record.nameID == 1:
                     # this is vsfilter's lookup behavior
-                    font_names.append(record.toUnicode())
+                    try:
+                        font_names.append(record.toUnicode())
+                    except UnicodeDecodeError:
+                        pass
             fs_selection = font["OS/2"].fsSelection
             for fn in font_names:
                 try:
@@ -63,6 +77,7 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             if fs_selection in font_map[new_fn]:
                 logging.warning(f'multiple candidates are found for "{font_names[0]}" fsSelection={fs_selection}; random one is chosen')
             font_map[new_fn][fs_selection] = font
+            font_loc[new_fn][fs_selection] = (font_path, idx if is_ttc else -1)
     fn404 = "00000000-0000-0000-0000-000000000000"
 
     # modify subtitles
@@ -169,6 +184,13 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
         subsetter = subset.Subsetter(subset.Options(hinting=False, layout_features=["vert", "vrt2"]))
         subsetter.populate(text="".join(chars))
         for fs, font in font_map[fn].items():
+            if font is None:
+                font_path, idx = font_loc[fn][fs]
+                if idx == -1:
+                    font = TTFont(font_path, recalcBBoxes=False, lazy=True)
+                else:
+                    font = TTCollection(font_path, recalcBBoxes=False, lazy=True).fonts[idx]
+                font_map[fn][fs] = font
             name_table = font["name"]
             name_table.names = []
             name_table.addName(fn, ((3, 1, 1033),), 0)
