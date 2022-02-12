@@ -42,6 +42,8 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
                 for fd in font_map.values():
                     for fs in fd:
                         fd[fs] = None
+                import gc
+                gc.collect()
                 font_file = open(font_path, "rb")
             else:
                 raise
