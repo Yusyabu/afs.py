@@ -41,7 +41,10 @@ def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, ou
             for record in name_table.names:
                 if record.platformID == 3 and record.nameID == 1:
                     # this is vsfilter's lookup behavior
-                    font_names.append(record.toUnicode())
+                    try:
+                        font_names.append(record.toUnicode())
+                    except UnicodeDecodeError:
+                        pass
             fs_selection = font["OS/2"].fsSelection
             for fn in font_names:
                 try:
