@@ -21,19 +21,20 @@ class FontNotFound(RuntimeError):
 def ass_font_subset(ass_files: Iterable[os.PathLike], fonts_dir: os.PathLike, output_dir: os.PathLike, *, continue_on_font_not_found: bool = False) -> None:
     # collect fonts
     fonts_dir = os.fsdecode(fonts_dir)
-    font_files: List[str] = []
-    for font_path in os.listdir(fonts_dir):
-        if os.path.splitext(font_path)[1].lower() in (".otf", ".ttf", ".ttc"):
-            font_files.append(os.path.join(fonts_dir, font_path))
     font_map: DefaultDict[str, Dict[int, TTFont]] = defaultdict(dict)
     fontname_map: Dict[str, str] = {}
-    for font_path in font_files:
-        if not os.path.isfile(font_path): continue
-        if os.path.splitext(font_path)[1].lower() == ".ttc":
-            ttc = TTCollection(font_path, recalcBBoxes=False, lazy=True)
+    for entry in os.scandir(fonts_dir):
+        if not entry.is_file(): continue
+        font_path = entry.path
+        if os.path.splitext(font_path)[1].lower() not in (".otf", ".ttf", ".ttc"): continue
+        font_file = open(font_path, "rb")
+        is_ttc = font_file.read(4) == b"ttcf"
+        font_file.seek(0)
+        if is_ttc:
+            ttc = TTCollection(font_file, recalcBBoxes=False, lazy=True)
             fonts = cast(List[TTFont], ttc.fonts)
         else:
-            fonts = cast(List[TTFont], [TTFont(font_path, recalcBBoxes=False, lazy=True)])
+            fonts = cast(List[TTFont], [TTFont(font_file, recalcBBoxes=False, lazy=True)])
         for font in fonts:
             name_table = font["name"]
             font_names = []
